@@ -7,9 +7,42 @@ use ncurses;
 use crate::life::{Life, Point, State};
 
 #[derive(Debug)]
-pub enum Direction {
+enum Direction {
     Forward,
     Backwards,
+}
+
+enum UserInput {
+    Up,
+    Down,
+    Left,
+    Right,
+    Move { dir: Direction, axis: usize, },
+    Pause,
+    Step,
+    Exit,
+    Noop,
+}
+
+impl UserInput {
+    fn new(input: i32) -> UserInput {
+        if let Some(chr) = std::char::from_u32(input as u32).map(|c| c.to_ascii_lowercase()) {
+            use UserInput::*;
+            return match chr {
+                'q' => Exit,
+                'w' => Up,
+                'a' => Left,
+                's' => Down,
+                'd' => Right,
+                'h' => Left,
+                'j' => Down,
+                'k' => Up,
+                'l' => Right,
+                _ => Noop,
+            };
+        }
+        UserInput::Noop
+    }
 }
 
 struct ScreenDimensions {
@@ -48,16 +81,36 @@ struct Session<const D: usize> {
 }
 
 impl<const D: usize> Session<D> {
-    fn update_position(&mut self, direction: Direction, dimension: usize) -> Result<Point<D>, String> {
+    fn new(game: Life<D>, screen_center: Point<D>) -> Session<D> {
+        Session {
+            game,
+            screen_center,
+        }
+    }
+
+    fn handle(&mut self, input: UserInput) {
+        match input {
+            UserInput::Up => self.update_position(Direction::Backwards, 1),
+            UserInput::Down => self.update_position(Direction::Forward, 1),
+            UserInput::Left => self.update_position(Direction::Backwards, 0),
+            UserInput::Right => self.update_position(Direction::Forward, 0),
+            UserInput::Move { dir, axis } => {}
+            UserInput::Pause => {}
+            UserInput::Step => {}
+            UserInput::Exit => {}
+            UserInput::Noop => {}
+        };
+    }
+
+    fn update_position(&mut self, direction: Direction, dimension: usize) {
         if dimension >= D {
-            return Err(format!("Dimension '{}' is not present in this simulation", dimension));
+            return;
         }
         let delta = match direction {
             Direction::Forward => 1,
             Direction::Backwards => -1,
         };
         self.screen_center.x[dimension] += delta;
-        Ok(self.screen_center.clone())
     }
 
     fn step(&mut self, rule: fn(State, usize) -> State) {
@@ -78,7 +131,7 @@ impl<const D: usize> fmt::Display for Session<D> {
                     }
                 })
                 .collect();
-                line + "\n"
+                line
             })
             .collect();
             screen.pop();
@@ -88,7 +141,7 @@ impl<const D: usize> fmt::Display for Session<D> {
     }
 }
 
-fn animate<const D: usize>(game: Life<D>, center: Point<D>, rule: fn(State, usize) -> State) {
+pub fn animate<const D: usize>(game: Life<D>, center: Point<D>, rule: fn(State, usize) -> State) {
     // set up display
     ncurses::initscr();
     ncurses::noecho();
@@ -104,10 +157,10 @@ fn animate<const D: usize>(game: Life<D>, center: Point<D>, rule: fn(State, usiz
     });
 
     // session data
-    let mut session = Session {
-        game,
-        screen_center: center,
-    };
+    let mut session = Session::new(game, center);
+
+    // draw first image
+    draw(&session);
 
     // animation loop
     loop {
@@ -116,6 +169,8 @@ fn animate<const D: usize>(game: Life<D>, center: Point<D>, rule: fn(State, usiz
             Ok(val) => handle_input(val, &mut session),
             Err(_) => { /* leave the screen alone */ },
         };
+        session.step(rule);
+        draw(&session);
         thread::sleep(Duration::from_millis(100));
     }
 }
@@ -127,10 +182,23 @@ fn graceful_exit() {
 }
 
 fn handle_input<const D: usize>(val: i32, session: &mut Session<D>) {
+    // let output = match std::char::from_u32(val as u32) {
+    //     Some(chr) => format!("Intercepted Character: '{}'\n", chr),
+    //     None => format!("Intercepted Value: '{}'\n", val),
+    // };
+    let input = UserInput::new(val);
+    session.handle(input);
+}
+
+fn draw<const D: usize>(session: &Session<D>) {
     ncurses::clear();
-    let output = match std::char::from_u32(val as u32) {
-        Some(chr) => format!("Intercepted Character: '{}'\n", chr),
-        None => format!("Intercepted Value: '{}'\n", val),
-    };
-    ncurses::addstr(&output);
+    let screen = format!(
+        "{}\rCtrl+C to Exit | {:?} | Live Cells: {}", 
+        session, 
+        session.screen_center.x, 
+        session.game.active_cells()
+    );
+    ncurses::addstr(&screen);
+    ncurses::refresh();
+    
 }
