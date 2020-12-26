@@ -113,8 +113,8 @@ impl<const D: usize> Session<D> {
         self.screen_center.x[dimension] += delta;
     }
 
-    fn step(&mut self, rule: fn(State, usize) -> State) {
-        self.game = self.game.next(rule)
+    fn step(&mut self) {
+        self.game = self.game.next()
     }
 }
 
@@ -141,7 +141,7 @@ impl<const D: usize> fmt::Display for Session<D> {
     }
 }
 
-pub fn animate<const D: usize>(game: Life<D>, center: Point<D>, rule: fn(State, usize) -> State) {
+pub fn animate<const D: usize>(game: Life<D>, center: Point<D>) {
     // set up display
     ncurses::initscr();
     ncurses::noecho();
@@ -169,7 +169,7 @@ pub fn animate<const D: usize>(game: Life<D>, center: Point<D>, rule: fn(State, 
             Ok(val) => handle_input(val, &mut session),
             Err(_) => { /* leave the screen alone */ },
         };
-        session.step(rule);
+        session.step();
         draw(&session);
         thread::sleep(Duration::from_millis(100));
     }
