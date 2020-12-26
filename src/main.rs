@@ -3,7 +3,7 @@
 mod life;
 mod display;
 
-use life::{Life, Point, State};
+use life::{Life, Point};
 
 extern crate ncurses;
 
