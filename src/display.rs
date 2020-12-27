@@ -2,7 +2,7 @@ use std::{fmt, process, thread};
 use std::time::Duration;
 
 use crossbeam_channel::bounded;
-use ncurses::{self, FALSE};
+use ncurses::*;
 
 use crate::life::{Life, Point, State};
 
@@ -17,7 +17,7 @@ enum UserInput {
     Down,
     Left,
     Right,
-    Move { dir: Direction, axis: usize, },
+    Move(Direction, usize),
     Pause,
     Step,
     Exit,
@@ -28,6 +28,7 @@ impl UserInput {
     fn new(input: i32) -> UserInput {
         if let Some(chr) = std::char::from_u32(input as u32).map(|c| c.to_ascii_lowercase()) {
             use UserInput::*;
+            use Direction::*;
             return match chr {
                 'q' => Exit,
                 'w' => Up,
@@ -40,6 +41,26 @@ impl UserInput {
                 'l' => Right,
                 ' ' => Pause,
                 '\n' => Step,
+                '1' => Move(Forward, 0),
+                '!' => Move(Backwards, 0),
+                '2' => Move(Backwards, 1),
+                '@' => Move(Forward, 1),
+                '3' => Move(Backwards, 2),
+                '#' => Move(Forward, 2),
+                '4' => Move(Backwards, 3),
+                '$' => Move(Forward, 3),
+                '5' => Move(Backwards, 4),
+                '%' => Move(Forward, 4),
+                '6' => Move(Backwards, 5),
+                '^' => Move(Forward, 5),
+                '7' => Move(Backwards, 6),
+                '&' => Move(Forward, 6),
+                '8' => Move(Backwards, 7),
+                '*' => Move(Forward, 7),
+                '9' => Move(Backwards, 8),
+                '(' => Move(Forward, 8),
+                '0' => Move(Backwards, 9),
+                ')' => Move(Forward, 9),
                 _ => Noop,
             };
         }
@@ -69,7 +90,11 @@ impl ScreenDimensions {
         None
     }
 
-    fn screen_coordinate_to_board_position<const D: usize>(&self, screen_position: (i32, i32), board_center: &Point<D>) -> Point<D> {
+    fn screen_coordinate_to_board_position<const D: usize>(
+        &self, 
+        screen_position: (i32, i32), 
+        board_center: &Point<D>
+    ) -> Point<D> {
         let (w, h) = screen_position;
         let grid_x = board_center.x[0] - self.radius_w + w;
         let grid_y = board_center.x[1] - self.radius_h + h;
@@ -106,8 +131,8 @@ impl<const D: usize> Session<D> {
             UserInput::Right => {
                 self.update_position(Direction::Forward, 0);
             },
-            UserInput::Move { dir, axis } => {
-                self.update_position(dir, axis);
+            UserInput::Move(dir, dim) => {
+                self.update_position(dir, dim);
             },
             UserInput::Pause => {
                 self.paused = !self.paused;
