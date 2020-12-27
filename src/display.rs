@@ -2,7 +2,7 @@ use std::{fmt, process, thread};
 use std::time::Duration;
 
 use crossbeam_channel::bounded;
-use ncurses;
+use ncurses::{self, FALSE};
 
 use crate::life::{Life, Point, State};
 
@@ -38,6 +38,8 @@ impl UserInput {
                 'j' => Down,
                 'k' => Up,
                 'l' => Right,
+                ' ' => Pause,
+                '\n' => Step,
                 _ => Noop,
             };
         }
@@ -78,6 +80,7 @@ impl ScreenDimensions {
 struct Session<const D: usize> {
     game: Life<D>,
     screen_center: Point<D>,
+    paused: bool,
 }
 
 impl<const D: usize> Session<D> {
@@ -85,20 +88,39 @@ impl<const D: usize> Session<D> {
         Session {
             game,
             screen_center,
+            paused: false,
         }
     }
 
     fn handle(&mut self, input: UserInput) {
         match input {
-            UserInput::Up => self.update_position(Direction::Backwards, 1),
-            UserInput::Down => self.update_position(Direction::Forward, 1),
-            UserInput::Left => self.update_position(Direction::Backwards, 0),
-            UserInput::Right => self.update_position(Direction::Forward, 0),
-            UserInput::Move { dir, axis } => {}
-            UserInput::Pause => {}
-            UserInput::Step => {}
-            UserInput::Exit => {}
-            UserInput::Noop => {}
+            UserInput::Up => {
+                self.update_position(Direction::Backwards, 1);
+            },
+            UserInput::Down => {
+                self.update_position(Direction::Forward, 1);
+            },
+            UserInput::Left => {
+                self.update_position(Direction::Backwards, 0);
+            },
+            UserInput::Right => {
+                self.update_position(Direction::Forward, 0);
+            },
+            UserInput::Move { dir, axis } => {
+                self.update_position(dir, axis);
+            },
+            UserInput::Pause => {
+                self.paused = !self.paused;
+            },
+            UserInput::Step => {
+                if self.paused {
+                    self.step();
+                } 
+            }
+            UserInput::Exit => {
+                graceful_exit()
+            },
+            UserInput::Noop => {},
         };
     }
 
@@ -145,6 +167,7 @@ pub fn animate<const D: usize>(game: Life<D>, center: Point<D>) {
     // set up display
     ncurses::initscr();
     ncurses::noecho();
+    ncurses::curs_set(ncurses::CURSOR_VISIBILITY::CURSOR_INVISIBLE);
 
     // start listener for user input
     let (s, r) = bounded(1);
@@ -169,7 +192,9 @@ pub fn animate<const D: usize>(game: Life<D>, center: Point<D>) {
             Ok(val) => handle_input(val, &mut session),
             Err(_) => { /* leave the screen alone */ },
         };
-        session.step();
+        if !session.paused {
+            session.step();
+        }
         draw(&session);
         thread::sleep(Duration::from_millis(100));
     }
@@ -182,22 +207,21 @@ fn graceful_exit() {
 }
 
 fn handle_input<const D: usize>(val: i32, session: &mut Session<D>) {
-    // let output = match std::char::from_u32(val as u32) {
-    //     Some(chr) => format!("Intercepted Character: '{}'\n", chr),
-    //     None => format!("Intercepted Value: '{}'\n", val),
-    // };
     let input = UserInput::new(val);
     session.handle(input);
 }
 
 fn draw<const D: usize>(session: &Session<D>) {
     ncurses::clear();
-    let screen = format!(
-        "{}\rCtrl+C to Exit | {:?} | Live Cells: {}", 
+    let mut screen = format!(
+        "{}\rCtrl+C to Exit | x: {:?} | Live Cells: {}", 
         session, 
         session.screen_center.x, 
         session.game.active_cells()
     );
+    if session.paused {
+        screen += " | paused";
+    }
     ncurses::addstr(&screen);
     ncurses::refresh();
     
