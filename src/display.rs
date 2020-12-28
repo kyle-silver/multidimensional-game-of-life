@@ -12,6 +12,11 @@ enum Direction {
     Backwards,
 }
 
+pub enum Playback {
+    Play,
+    Step
+}
+
 enum UserInput {
     Up,
     Down,
@@ -98,23 +103,22 @@ impl ScreenDimensions {
         let (w, h) = screen_position;
         let grid_x = board_center.x[0] - self.radius_w + w;
         let grid_y = board_center.x[1] - self.radius_h + h;
-        Point::from_duple(grid_x, grid_y)
+        let mut point = board_center.clone();
+        point.x[0] = grid_x;
+        point.x[1] = grid_y;
+        point
     }
 }
 
 struct Session<const D: usize> {
     game: Life<D>,
     screen_center: Point<D>,
-    paused: bool,
+    playback: Playback,
 }
 
 impl<const D: usize> Session<D> {
-    fn new(game: Life<D>, screen_center: Point<D>) -> Session<D> {
-        Session {
-            game,
-            screen_center,
-            paused: false,
-        }
+    fn new(game: Life<D>, screen_center: Point<D>, playback: Playback) -> Session<D> {
+        Session { game, screen_center, playback, }
     }
 
     fn handle(&mut self, input: UserInput) {
@@ -135,12 +139,18 @@ impl<const D: usize> Session<D> {
                 self.update_position(dir, dim);
             },
             UserInput::Pause => {
-                self.paused = !self.paused;
+                self.playback = match self.playback {
+                    Playback::Play => Playback::Step,
+                    Playback::Step => Playback::Play,
+                };
             },
             UserInput::Step => {
-                if self.paused {
-                    self.step();
-                } 
+                match self.playback {
+                    Playback::Play => {}
+                    Playback::Step => {
+                        self.step();
+                    },
+                };
             }
             UserInput::Exit => {
                 graceful_exit()
@@ -188,7 +198,7 @@ impl<const D: usize> fmt::Display for Session<D> {
     }
 }
 
-pub fn animate<const D: usize>(game: Life<D>, center: Point<D>) {
+pub fn animate<const D: usize>(game: Life<D>, screen_center: Point<D>, playback: Playback) {
     // set up display
     ncurses::initscr();
     ncurses::noecho();
@@ -205,22 +215,30 @@ pub fn animate<const D: usize>(game: Life<D>, center: Point<D>) {
     });
 
     // session data
-    let mut session = Session::new(game, center);
+    let mut session = Session::new(game, screen_center, playback);
 
     // draw first image
     draw(&session);
 
     // animation loop
     loop {
-        match r.recv_timeout(Duration::from_millis(10)) {
-            Ok(0) => graceful_exit(),
-            Ok(val) => handle_input(val, &mut session),
-            Err(_) => { /* leave the screen alone */ },
+        let repaint: bool = match r.recv_timeout(Duration::from_millis(10)) {
+            Ok(0) => {
+                graceful_exit();
+                false
+            },
+            Ok(val) => {
+                handle_input(val, &mut session);
+                true
+            },
+            Err(_) => { if matches!(session.playback, Playback::Play) { true } else { false } },
         };
-        if !session.paused {
+        if matches!(session.playback, Playback::Play) {
             session.step();
         }
-        draw(&session);
+        if repaint {
+            draw(&session);
+        }
         thread::sleep(Duration::from_millis(100));
     }
 }
@@ -244,7 +262,7 @@ fn draw<const D: usize>(session: &Session<D>) {
         session.screen_center.x, 
         session.game.active_cells()
     );
-    if session.paused {
+    if matches!(session.playback, Playback::Step) {
         screen += " | paused";
     }
     ncurses::addstr(&screen);

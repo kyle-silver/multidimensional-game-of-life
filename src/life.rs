@@ -3,6 +3,25 @@ use std::ops::Add;
 use fxhash::FxHashSet;
 use rayon::prelude::*;
 
+pub const STANDARD_RULES: fn(State, usize) -> State = |state, live_neighbors| {
+    match state {
+        State::Alive => {
+            if live_neighbors == 2 || live_neighbors == 3 {
+                State::Alive
+            } else {
+                State::Dead
+            }
+        },
+        State::Dead => {
+            if live_neighbors == 3 {
+                State::Alive
+            } else {
+                State::Dead
+            }
+        }
+    }
+};
+
 #[derive(Debug)]
 pub enum State {
     Alive,
@@ -89,27 +108,6 @@ pub struct Life<const D: usize> {
 impl<const D: usize> Life<D> {
     pub fn new(initial: FxHashSet<Point<D>>, rule: fn(State, usize) -> State) -> Life<D> {
         Life { alive: initial, rule }
-    }
-
-    pub fn from_plate_default_rules(plate: &[&str]) -> Life<D> {
-        Life::from_plate(plate, |state, neighbors| {
-            match state {
-                State::Alive => {
-                    if neighbors == 2 || neighbors == 3 {
-                        State::Alive
-                    } else {
-                        State::Dead
-                    }
-                },
-                State::Dead => {
-                    if neighbors == 3 {
-                        State::Alive
-                    } else {
-                        State::Dead
-                    }
-                }
-            }
-        })
     }
 
     pub fn from_plate(plate: &[&str], rule: fn(State, usize) -> State) -> Life<D> {

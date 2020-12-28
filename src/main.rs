@@ -3,14 +3,14 @@
 mod life;
 mod display;
 
+use display::Playback;
 use life::{Life, Point};
 
-extern crate ncurses;
 
 fn main()
 {
     let plate: Vec<&str> = include_str!("../res/gosper-glider-gun.txt").split('\n').collect();
-    let game: Life<2> = Life::from_plate_default_rules(&plate);
+    let game: Life<2> = Life::from_plate(&plate, life::STANDARD_RULES);
 
-    display::animate(game, Point::from_duple(20, 5))
+    display::animate(game, Point::from_duple(20, 5), Playback::Step);
 }
